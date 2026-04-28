@@ -4,6 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+#![cfg(feature = "find-actions")]
+
 /// ! This file contains what would be normally be unit tests for `find::matchers::exec`.
 /// ! But as the tests require running an external executable, they need to be run
 /// ! as integration tests so we can ensure that our testing-commandline binary

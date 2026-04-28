@@ -259,6 +259,7 @@ fn do_find(args: &[&str], deps: &dyn Dependencies) -> Result<i32, Box<dyn Error>
 }
 
 fn print_help() {
+    let find_actions_help = find_actions_help();
     println!(
         r"Usage: find [path...] [expression]
 
@@ -279,7 +280,6 @@ Early alpha implementation. Currently the only expressions supported are
  -type type_char
     currently type_char can only be f (for file) or d (for directory)
  -size [+-]N[bcwkMG]
- -delete
  -prune
  -not
  -a
@@ -297,12 +297,22 @@ Early alpha implementation. Currently the only expressions supported are
  -mtime [+-]N
  -perm [-/]{{octal|u=rwx,go=w}}
  -newer path_to_file
- -exec[dir] executable [args] [{{}}] [more args] ;
+{find_actions_help}
  -sorted
     a non-standard extension that sorts directory contents by name before
     processing them. Less efficient, but allows for deterministic output.
 "
     );
+}
+
+#[cfg(feature = "find-actions")]
+fn find_actions_help() -> &'static str {
+    " -delete\n -exec[dir] executable [args] [{}] [more args] ;"
+}
+
+#[cfg(not(feature = "find-actions"))]
+fn find_actions_help() -> &'static str {
+    ""
 }
 
 fn print_version() {
@@ -1412,6 +1422,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "find-actions")]
     fn find_fprinter() {
         let printer = ["fprint", "fprint0"];
 
@@ -1509,6 +1520,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "find-actions")]
     fn find_fprintf() {
         let deps = FakeDependencies::new();
         let rc = find_main(

@@ -5,9 +5,11 @@
 // https://opensource.org/licenses/MIT.
 
 mod access;
+#[cfg(feature = "find-actions")]
 mod delete;
 mod empty;
 mod entry;
+#[cfg(feature = "find-actions")]
 pub mod exec;
 pub mod fs;
 mod glob;
@@ -32,8 +34,10 @@ mod type_matcher;
 mod user;
 
 use self::access::AccessMatcher;
+#[cfg(feature = "find-actions")]
 use self::delete::DeleteMatcher;
 use self::empty::EmptyMatcher;
+#[cfg(feature = "find-actions")]
 use self::exec::{MultiExecMatcher, SingleExecMatcher};
 use self::group::{GroupMatcher, NoGroupMatcher};
 use self::lname::LinkNameMatcher;
@@ -308,6 +312,11 @@ fn convert_arg_to_number(
     }
 }
 
+#[cfg(not(feature = "find-actions"))]
+fn disabled_find_action_error(action: &str) -> Box<dyn Error> {
+    From::from(format!("{action} support is disabled in this build"))
+}
+
 fn convert_arg_to_comparable_value(
     option_name: &str,
     value_as_string: &str,
@@ -423,6 +432,7 @@ fn parse_str_to_newer_args(input: &str) -> Option<(String, String)> {
 
 /// Creates a file if it doesn't exist.
 /// If it does exist, it will be overwritten.
+#[cfg(feature = "find-actions")]
 fn get_or_create_file(path: &str) -> Result<File, Box<dyn Error>> {
     let file = File::create(path)?;
     Ok(file)
@@ -460,45 +470,73 @@ fn build_matcher_tree(
                 Some(Printf::new(args[i], None)?.into_box())
             }
             "-fprint" => {
-                if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                #[cfg(not(feature = "find-actions"))]
+                {
+                    return Err(disabled_find_action_error(args[i]));
                 }
-                i += 1;
+                #[cfg(feature = "find-actions")]
+                {
+                    if i >= args.len() - 1 {
+                        return Err(From::from(format!("missing argument to {}", args[i])));
+                    }
+                    i += 1;
 
-                let file = get_or_create_file(args[i])?;
-                Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
+                    let file = get_or_create_file(args[i])?;
+                    Some(Printer::new(PrintDelimiter::Newline, Some(file)).into_box())
+                }
             }
             "-fprintf" => {
-                if i >= args.len() - 2 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                #[cfg(not(feature = "find-actions"))]
+                {
+                    return Err(disabled_find_action_error(args[i]));
                 }
+                #[cfg(feature = "find-actions")]
+                {
+                    if i >= args.len() - 2 {
+                        return Err(From::from(format!("missing argument to {}", args[i])));
+                    }
 
-                // Action: -fprintf file format
-                // Args + 1: output file path
-                // Args + 2: format string
-                i += 1;
-                let file = get_or_create_file(args[i])?;
-                i += 1;
-                Some(Printf::new(args[i], Some(file))?.into_box())
+                    // Action: -fprintf file format
+                    // Args + 1: output file path
+                    // Args + 2: format string
+                    i += 1;
+                    let file = get_or_create_file(args[i])?;
+                    i += 1;
+                    Some(Printf::new(args[i], Some(file))?.into_box())
+                }
             }
             "-fprint0" => {
-                if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                #[cfg(not(feature = "find-actions"))]
+                {
+                    return Err(disabled_find_action_error(args[i]));
                 }
-                i += 1;
+                #[cfg(feature = "find-actions")]
+                {
+                    if i >= args.len() - 1 {
+                        return Err(From::from(format!("missing argument to {}", args[i])));
+                    }
+                    i += 1;
 
-                let file = get_or_create_file(args[i])?;
-                Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
+                    let file = get_or_create_file(args[i])?;
+                    Some(Printer::new(PrintDelimiter::Null, Some(file)).into_box())
+                }
             }
             "-ls" => Some(Ls::new(None).into_box()),
             "-fls" => {
-                if i >= args.len() - 1 {
-                    return Err(From::from(format!("missing argument to {}", args[i])));
+                #[cfg(not(feature = "find-actions"))]
+                {
+                    return Err(disabled_find_action_error(args[i]));
                 }
-                i += 1;
+                #[cfg(feature = "find-actions")]
+                {
+                    if i >= args.len() - 1 {
+                        return Err(From::from(format!("missing argument to {}", args[i])));
+                    }
+                    i += 1;
 
-                let file = get_or_create_file(args[i])?;
-                Some(Ls::new(Some(file)).into_box())
+                    let file = get_or_create_file(args[i])?;
+                    Some(Ls::new(Some(file)).into_box())
+                }
             }
             "-true" => Some(TrueMatcher.into_box()),
             "-false" => Some(FalseMatcher.into_box()),
@@ -568,9 +606,16 @@ fn build_matcher_tree(
                 Some(FileSystemMatcher::new(args[i].to_string()).into_box())
             }
             "-delete" => {
-                // -delete implicitly requires -depth
-                config.depth_first = true;
-                Some(DeleteMatcher::new().into_box())
+                #[cfg(not(feature = "find-actions"))]
+                {
+                    return Err(disabled_find_action_error(args[i]));
+                }
+                #[cfg(feature = "find-actions")]
+                {
+                    // -delete implicitly requires -depth
+                    config.depth_first = true;
+                    Some(DeleteMatcher::new().into_box())
+                }
             }
             "-newer" => {
                 if i >= args.len() - 1 {
@@ -623,49 +668,60 @@ fn build_matcher_tree(
             }
             "-empty" => Some(EmptyMatcher::new().into_box()),
             "-exec" | "-execdir" => {
-                let mut arg_index = i + 1;
-                while arg_index < args.len()
-                    && args[arg_index] != ";"
-                    && (args[arg_index - 1] != "{}" || args[arg_index] != "+")
+                #[cfg(not(feature = "find-actions"))]
                 {
-                    arg_index += 1;
+                    return Err(disabled_find_action_error(args[i]));
                 }
-                let required_arg = if arg_index < args.len() && args[arg_index] == "+" {
-                    3
-                } else {
-                    2
-                };
-                if arg_index < i + required_arg || arg_index == args.len() {
-                    // at the minimum we need the executable and the ';'
-                    // or the executable and the '{} +'
-                    return Err(From::from(format!("missing argument to {}", args[i])));
-                }
-                let expression = args[i];
-                let executable = args[i + 1];
-                let exec_args = &args[i + 2..arg_index];
-                i = arg_index;
-                match args[arg_index] {
-                    ";" => Some(
-                        SingleExecMatcher::new(executable, exec_args, expression == "-execdir")?
-                            .into_box(),
-                    ),
-                    "+" => {
-                        if exec_args.iter().filter(|x| matches!(**x, "{}")).count() == 1 {
-                            Some(
-                                MultiExecMatcher::new(
-                                    executable,
-                                    &exec_args[0..exec_args.len() - 1],
-                                    expression == "-execdir",
-                                )?
-                                .into_box(),
-                            )
-                        } else {
-                            return Err(From::from(
-                                "Only one instance of {} is supported with -execdir ... +",
-                            ));
-                        }
+                #[cfg(feature = "find-actions")]
+                {
+                    let mut arg_index = i + 1;
+                    while arg_index < args.len()
+                        && args[arg_index] != ";"
+                        && (args[arg_index - 1] != "{}" || args[arg_index] != "+")
+                    {
+                        arg_index += 1;
                     }
-                    _ => unreachable!("Encountered unexpected value {}", args[arg_index]),
+                    let required_arg = if arg_index < args.len() && args[arg_index] == "+" {
+                        3
+                    } else {
+                        2
+                    };
+                    if arg_index < i + required_arg || arg_index == args.len() {
+                        // at the minimum we need the executable and the ';'
+                        // or the executable and the '{} +'
+                        return Err(From::from(format!("missing argument to {}", args[i])));
+                    }
+                    let expression = args[i];
+                    let executable = args[i + 1];
+                    let exec_args = &args[i + 2..arg_index];
+                    i = arg_index;
+                    match args[arg_index] {
+                        ";" => Some(
+                            SingleExecMatcher::new(
+                                executable,
+                                exec_args,
+                                expression == "-execdir",
+                            )?
+                            .into_box(),
+                        ),
+                        "+" => {
+                            if exec_args.iter().filter(|x| matches!(**x, "{}")).count() == 1 {
+                                Some(
+                                    MultiExecMatcher::new(
+                                        executable,
+                                        &exec_args[0..exec_args.len() - 1],
+                                        expression == "-execdir",
+                                    )?
+                                    .into_box(),
+                                )
+                            } else {
+                                return Err(From::from(
+                                    "Only one instance of {} is supported with -execdir ... +",
+                                ));
+                            }
+                        }
+                        _ => unreachable!("Encountered unexpected value {}", args[arg_index]),
+                    }
                 }
             }
             #[cfg(unix)]
@@ -1560,6 +1616,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "find-actions")]
     fn build_top_level_exec_not_enough_args() {
         let mut config = Config::default();
 
@@ -1607,6 +1664,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "find-actions")]
     fn build_top_level_exec_should_eat_args() {
         let mut config = Config::default();
         build_top_level_matcher(&["-exec", "foo", "-o", "(", ";"], &mut config)
@@ -1614,6 +1672,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "find-actions")]
     fn build_top_level_exec_plus_semicolon() {
         let mut config = Config::default();
         build_top_level_matcher(&["-exec", "foo", "{}", "foo", "+", ";"], &mut config)
@@ -1621,6 +1680,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "find-actions")]
     fn build_top_level_multi_exec_too_many_holders() {
         let mut config = Config::default();
         if let Err(e) =
@@ -1629,6 +1689,24 @@ mod tests {
             assert!(e.to_string().contains("Only one instance of {}"));
         } else {
             panic!("parsing argument list with more than one {{}} for + should fail");
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "find-actions"))]
+    fn build_top_level_rejects_disabled_find_actions() {
+        for action in [
+            "-delete", "-exec", "-execdir", "-fprint", "-fprint0", "-fprintf", "-fls",
+        ] {
+            let mut config = Config::default();
+            let result = build_top_level_matcher(&[action], &mut config);
+            match result {
+                Err(e) => assert!(
+                    e.to_string().contains("support is disabled in this build"),
+                    "bad description for {action}: {e}"
+                ),
+                Ok(_) => panic!("{action} should be rejected when find actions are disabled"),
+            }
         }
     }
 
@@ -1803,6 +1881,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "find-actions")]
     fn get_or_create_file_test() {
         use std::fs;
 
